@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>Flappy Sayan</title>
-<link rel="icon" type="image/png" href="sayan_head.png">
 <style>
   html,body{margin:0;height:100%;background:#1b1530;overflow:hidden;font-family:"Comic Sans MS","Chalkboard SE",system-ui,sans-serif}
   body{display:flex;align-items:center;justify-content:center}
@@ -14,7 +13,7 @@
 <body>
 <canvas id="c" width="400" height="640"></canvas>
 <script>
-// Put sayan_head.png, floor.png, sound.mp3, fly.png, cry.png and pakar.mp3 in the SAME folder as this file.
+// Put sayan_head.png, floor.png, sound.mp3, fly.png, cry.png, pakar.mp3 and bg.mp3 in the SAME folder as this file.
 const W=400,H=640,FLOOR_H=90,GROUND_Y=H-FLOOR_H;
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 
@@ -47,9 +46,18 @@ const floorImg=new Image();floorImg.src='floor.png';
 const cryImg=new Image();cryImg.src='cry.png'; // shown while the fly is following the player
 const hitSound=new Audio('sound.mp3');hitSound.preload='auto';
 
-// ---------- FLY (appears at score 10) ----------
+// ---------- BACKGROUND MUSIC ----------
+const bgm=new Audio('bg.mp3');bgm.loop=true;bgm.preload='auto';
+function bgmStart(){            // always starts from the beginning
+  try{bgm.currentTime=0;bgm.volume=fly?0.01:1;const p=bgm.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
+}
+function bgmStop(){try{bgm.pause();bgm.currentTime=0}catch(e){}}
+function bgmDuck(on){try{bgm.volume=on?0.01:1}catch(e){}} // on = 1% volume, off = 100%
+// --------------------------------------
+
+// ---------- FLY ----------
 // ===== FLY SETTINGS (adjust these) =====
-const FLY_SCORES=[10,20,30,40]; // fly appears when score hits any of these
+const FLY_SCORES=[7,15,25,35];  // fly appears when score hits any of these
 const FLY_IN_MS=700;            // time to slide in from the left (ms)
 const FLY_FOLLOW_MS=4000;       // how long the fly follows the head (ms) - 4000 = 4 sec
 const FLY_OUT_MS=1500;          // time to slow down and slide out to the left (ms)
@@ -83,6 +91,7 @@ function spawnFly(){
   flySoundStop();
   fly={ph:'in',t:0,x:-90,y:by-10,x0:0,rot:0};
   flySoundStart();
+  bgmDuck(true);   // music down to 1% while the fly sound plays
   pops.push({x:W/2-50,y:by-40,life:1,t:'PAKR PAKAR!'});
 }
 function updateFly(dt){
@@ -103,7 +112,7 @@ function updateFly(dt){
     fly.x=fly.x0-(fly.x0+130)*k*k;
     fly.y+=(by+Math.sin(fly.t/400)*6-fly.y)*.03*(1-k)*dt;
     flySoundFade(1-k);
-    if(k>=1){flySoundStop();fly=null;return}
+    if(k>=1){flySoundStop();fly=null;bgmDuck(false);return}  // music back to 100%
   }
   fly.rot+=(Math.max(-.3,Math.min(.3,(by-fly.y)*.008))-fly.rot)*.1*dt;
 }
@@ -158,7 +167,7 @@ function fireFart(n,burst){
   }
 }
 function flap(){
-  if(state==='ready'){state='play';bv=FLAP;fireFart(5,true);flameT=10;tootSound();}
+  if(state==='ready'){state='play';bv=FLAP;fireFart(5,true);flameT=10;tootSound();bgmStart();}
   else if(state==='play'){bv=FLAP;fireFart(5,true);flameT=10;tootSound();}
   else if(state==='dead'&&performance.now()-deadAt>600){reset();state='ready';}
 }
@@ -166,7 +175,7 @@ function die(){
   if(state!=='play')return;
   state='dead';
   if(fly&&fly.ph!=='out'){fly.ph='out';fly.t=0;fly.x0=fly.x}
-  deadAt=performance.now();shake=14;playHit();
+  deadAt=performance.now();shake=14;bgmStop();playHit();
   taunt=taunts[Math.floor(Math.random()*taunts.length)];
   if(score>best){best=score;try{localStorage.setItem('sayanBest',best)}catch(e){}}
 }
