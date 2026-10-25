@@ -188,8 +188,8 @@ function playHit(){
   try{hitSound.currentTime=0;const p=hitSound.play();if(p&&p.catch)p.catch(beepFallback);}catch(e){beepFallback()}
 }
 
-const taunts=["Skill issue.","Gravity wins again.","Pillar: 1  Sayan: 0","Even your head is disappointed.","Ouch! That's gonna leave a mark.","Have you tried NOT hitting it?","The pillar didn't even move...","Bro really flew into a wall.","Big head, small brain moment.","Press tap. Not your luck."];
-const praise={1:"First point! Wow!",5:"Okay, not bad.",10:"Ten! Show-off.",20:"Are you cheating?!",30:"LEGEND. Touch grass.",50:"UNREAL. Go outside."};
+const taunts=["Tere bas ka bat nahi","Tu Jake cartoon network dekh","Sayan ka pichuara fat gaya","Gand fat gaya","Ouch!💦","Gudi lal ho gayi?","Gar fate gache?","Chota dih, Bara sapna","Big head, small brain moment.","Chii"];
+const praise={1:"First point! Wow! 😍",5:"Sexy 😍",10:"Ahhh..💦💦 that great😍",20:"Soooo! hot🥵",30:"Water come out💦🥵",40:"Oo yeah dady😘💦",50:"Muuhhhaa😘",};
 
 let state='ready',score=0,best=+(localStorage.getItem('sayanBest')||0);
 let by,bv,rot,pipes,floorX,bgX,t0=0,deadAt=0,shake=0,taunt='',toast='',toastT=0,frame=0;
@@ -204,7 +204,7 @@ function newPipe(x){return{x,top:70+Math.random()*(GROUND_Y-GAP-140),passed:fals
 let flameT=0,held=false;
 const FSTOPS=[[0,[255,185,60]],[.15,[255,115,15]],[.4,[205,45,4]],[.7,[115,14,0]],[1,[28,4,0]]];
 function fireColor(u){for(let i=1;i<FSTOPS.length;i++){if(u<=FSTOPS[i][0]){const a=FSTOPS[i-1],b=FSTOPS[i],t=(u-a[0])/(b[0]-a[0]);return[0,1,2].map(j=>a[1][j]+(b[1][j]-a[1][j])*t|0)}}return[28,4,0]}
-const parts=[],pops=[],pfts=['PFFFT!','BRRAP!','TOOT!','FWOOSH!','PRRT!'];
+const parts=[],pops=[],pfts=['FATHH!','Ahhh!','Poop!','Fushh!','Foosh!'];
 const FART_SOUND=true; // set to false to mute the little toot
 function tootSound(){
   if(!FART_SOUND)return;
