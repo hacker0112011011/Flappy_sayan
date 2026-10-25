@@ -13,7 +13,9 @@
 <body>
 <canvas id="c" width="400" height="640"></canvas>
 <script>
-// Put sayan_head.png, floor.png, sound.mp3, fly.png, cry.png, pakar.mp3 and bg.mp3 in the SAME folder as this file.
+// Put these in the SAME folder as this file:
+// images: sayan_head.png, floor.png, fly.png, cry.png, angry.png, kick.png
+// sounds: sound.mp3, pakar.mp3, bg.mp3, teri.mp3, kick.mp3
 const W=400,H=640,FLOOR_H=90,GROUND_Y=H-FLOOR_H;
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 
@@ -43,26 +45,41 @@ bird.onload=()=>{try{
 }catch(e){}};
 bird.src='sayan_head.png';
 const floorImg=new Image();floorImg.src='floor.png';
-const cryImg=new Image();cryImg.src='cry.png'; // shown while the fly is following the player
+const cryImg=new Image();cryImg.src='cry.png';       // while the fly follows the player
+const angryImg=new Image();angryImg.src='angry.png'; // angry head (score 26 fly, score 35 finale)
+const kickImg=new Image();kickImg.src='kick.png';    // kicking the fly
 const hitSound=new Audio('sound.mp3');hitSound.preload='auto';
+const teriSound=new Audio('teri.mp3');teriSound.preload='auto';
+const kickSound=new Audio('kick.mp3');kickSound.preload='auto';
 
 // ---------- BACKGROUND MUSIC ----------
+const BGM_VOL=0.8;    // normal music volume (80%)
+const BGM_DUCK=0.01;  // volume while another sound plays (1%)
 const bgm=new Audio('bg.mp3');bgm.loop=true;bgm.preload='auto';
+function isPlaying(a){return !a.paused&&!a.ended}
 function bgmStart(){            // always starts from the beginning
-  try{bgm.currentTime=0;bgm.volume=fly?0.01:1;const p=bgm.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
+  try{bgm.currentTime=0;bgm.volume=BGM_VOL;const p=bgm.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
 }
 function bgmStop(){try{bgm.pause();bgm.currentTime=0}catch(e){}}
-function bgmDuck(on){try{bgm.volume=on?0.01:1}catch(e){}} // on = 1% volume, off = 100%
+function bgmSync(){             // 1% while fly / teri / kick sounds play, otherwise 80%
+  const duck=!!fly||isPlaying(teriSound)||isPlaying(kickSound);
+  try{bgm.volume=duck?BGM_DUCK:BGM_VOL}catch(e){}
+}
 // --------------------------------------
 
 // ---------- FLY ----------
 // ===== FLY SETTINGS (adjust these) =====
-const FLY_SCORES=[7,15,25,35];  // fly appears when score hits any of these
+const FLY_SCORES=[7,15,25,35];  // fly appears at these scores. No fly after 35 (none at 45).
+const FINAL_SCORE=35;           // this fly stays until the player kicks it away
+const TERI_SCORE=26;            // head turns angry + teri.mp3 plays (while the score-25 fly is there)
+const KICK_AT=36.5;             // the kick scene starts at this score (36 + half a pipe)
 const FLY_IN_MS=700;            // time to slide in from the left (ms)
-const FLY_FOLLOW_MS=4000;       // how long the fly follows the head (ms) - 4000 = 4 sec
+const FLY_FOLLOW_MS=4000;       // how long a normal fly follows the head (ms) - 4000 = 4 sec
 const FLY_OUT_MS=1500;          // time to slow down and slide out to the left (ms)
 const FLY_SIZE=60;              // fly height in pixels
+const FINAL_FLY_X=55;           // where the score-35 fly hovers (to the left of the head)
 // =======================================
+const PIPE_SPACING=210;
 const flyImg=new Image();flyImg.src='fly.png';
 const flyAudio=new Audio('pakar.mp3');flyAudio.loop=true;flyAudio.preload='auto';
 let fly=null,flySynth=null;
@@ -89,34 +106,76 @@ function flySoundStop(){
 }
 function spawnFly(){
   flySoundStop();
-  fly={ph:'in',t:0,x:-90,y:by-10,x0:0,rot:0};
+  fly={ph:'in',t:0,x:-90,y:by-10,x0:0,rot:0,final:score===FINAL_SCORE,angry:false,vx:0,vy:0,spin:0};
   flySoundStart();
-  bgmDuck(true);   // music down to 1% while the fly sound plays
   pops.push({x:W/2-50,y:by-40,life:1,t:'PAKR PAKAR!'});
+}
+function playTeri(){
+  try{teriSound.currentTime=0;const p=teriSound.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
 }
 function updateFly(dt){
   if(!fly)return;
+  if(fly.ph==='kicked'){                   // sent flying by the kick
+    fly.x+=fly.vx*dt;fly.y+=fly.vy*dt;fly.vy+=.12*dt;fly.rot+=fly.spin*dt;
+    if(fly.x<-160||fly.y<-160||fly.y>H+160)fly=null;
+    return;
+  }
   fly.t+=dt*16.667;
-  const tx=W/2-95;
+  const tx=fly.final?FINAL_FLY_X:W/2-95;
   if(fly.ph==='in'){                       // slide in from the left
     const k=Math.min(1,fly.t/FLY_IN_MS),e=1-Math.pow(1-k,3);
     fly.x=-90+(tx+90)*e;
     fly.y+=(by-10+Math.sin(fly.t/300)*6-fly.y)*.08*dt;
     if(k>=1){fly.ph='follow';fly.t=0}
-  }else if(fly.ph==='follow'){             // buzz around the head (FLY_FOLLOW_MS)
-    fly.x+=(tx+Math.sin(fly.t/500)*14-fly.x)*.06*dt;
+  }else if(fly.ph==='follow'){             // buzz around the head
+    fly.x+=(tx+Math.sin(fly.t/500)*(fly.final?6:14)-fly.x)*.06*dt;
     fly.y+=(by-5+Math.sin(fly.t/400)*8-fly.y)*.06*dt;
-    if(fly.t>=FLY_FOLLOW_MS){fly.ph='out';fly.t=0;fly.x0=fly.x}
+    if(!fly.final&&fly.t>=FLY_FOLLOW_MS){fly.ph='out';fly.t=0;fly.x0=fly.x} // final fly never leaves by itself
   }else{                                   // slow down, then slide out left
     const k=Math.min(1,fly.t/FLY_OUT_MS);
     fly.x=fly.x0-(fly.x0+130)*k*k;
     fly.y+=(by+Math.sin(fly.t/400)*6-fly.y)*.03*(1-k)*dt;
     flySoundFade(1-k);
-    if(k>=1){flySoundStop();fly=null;bgmDuck(false);return}  // music back to 100%
+    if(k>=1){flySoundStop();fly=null;return}
   }
   fly.rot+=(Math.max(-.3,Math.min(.3,(by-fly.y)*.008))-fly.rot)*.1*dt;
 }
 // -----------------------------------------------
+
+// ---------- KICK SCENE (after score 36.5) ----------
+let px=W/2,flip=false,fin=null,finDist=0,finDone=false;
+const ease=k=>k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+function startFin(){
+  fin={ph:'turn',t:0,from:px,to:px};
+  flip=true;rot=0;flameT=0;held=false;parts.length=0;pops.length=0; // everything freezes
+}
+function doKick(){
+  try{kickSound.currentTime=0;const p=kickSound.play();if(p&&p.catch)p.catch(beepFallback);}catch(e){beepFallback()}
+  flySoundStop();
+  if(fly){fly.ph='kicked';fly.vx=-11;fly.vy=-8;fly.spin=-.35}
+}
+function updateFin(dt){
+  fin.t+=dt*16.667;
+  if(fin.ph==='turn'){                     // mirror the head
+    if(fin.t>=350){fin.ph='go';fin.t=0;fin.from=px;fin.to=(fly?fly.x:FINAL_FLY_X)+95}
+  }else if(fin.ph==='go'){                 // go to the fly
+    const k=Math.min(1,fin.t/800);px=fin.from+(fin.to-fin.from)*ease(k);
+    if(k>=1){fin.ph='kick';fin.t=0;doKick()}
+  }else if(fin.ph==='kick'){               // kick.png + kick.mp3, fly flies away
+    if(fin.t>=800){fin.ph='angry';fin.t=0}
+  }else if(fin.ph==='angry'){              // back to angry.png
+    if(fin.t>=500){fin.ph='back';fin.t=0;fin.from=px;flip=false}
+  }else if(fin.ph==='back'){               // return to the normal place
+    const k=Math.min(1,fin.t/800);px=fin.from+(W/2-fin.from)*ease(k);
+    if(k>=1){px=W/2;fin=null;finDone=true;bv=0} // normal sayan_head.png again, game resumes
+  }
+}
+function currentHead(){
+  if(fin)return fin.ph==='kick'?kickImg:angryImg;
+  if(fly&&fly.ph!=='out'&&fly.ph!=='kicked')return(fly.final||fly.angry)?angryImg:cryImg;
+  return bird;
+}
+// ---------------------------------------------------
 
 function ok(i){return i.complete&&i.naturalWidth>0}
 function beepFallback(){
@@ -137,8 +196,10 @@ let by,bv,rot,pipes,floorX,bgX,t0=0,deadAt=0,shake=0,taunt='',toast='',toastT=0,
 const BR=55,GAP=250,PW=80,SPEED=2.5,GRAV=.42,FLAP=-7.6;
 
 function reset(){flySoundStop();fly=null;
+  try{teriSound.pause();kickSound.pause()}catch(e){}
+  fin=null;flip=false;px=W/2;finDist=0;finDone=false;
   by=H/2-40;bv=0;rot=0;pipes=[];floorX=0;score=0;shake=0;frame=0;
-  pipes.push(newPipe(W+80));pipes.push(newPipe(W+80+210));}
+  pipes.push(newPipe(W+80));pipes.push(newPipe(W+80+PIPE_SPACING));}
 function newPipe(x){return{x,top:70+Math.random()*(GROUND_Y-GAP-140),passed:false}}
 let flameT=0,held=false;
 const FSTOPS=[[0,[255,185,60]],[.15,[255,115,15]],[.4,[205,45,4]],[.7,[115,14,0]],[1,[28,4,0]]];
@@ -167,6 +228,7 @@ function fireFart(n,burst){
   }
 }
 function flap(){
+  if(fin)return; // taps are ignored during the kick scene
   if(state==='ready'){state='play';bv=FLAP;fireFart(5,true);flameT=10;tootSound();bgmStart();}
   else if(state==='play'){bv=FLAP;fireFart(5,true);flameT=10;tootSound();}
   else if(state==='dead'&&performance.now()-deadAt>600){reset();state='ready';}
@@ -174,7 +236,8 @@ function flap(){
 function die(){
   if(state!=='play')return;
   state='dead';
-  if(fly&&fly.ph!=='out'){fly.ph='out';fly.t=0;fly.x0=fly.x}
+  if(fly&&fly.ph!=='out'&&fly.ph!=='kicked'){fly.ph='out';fly.t=0;fly.x0=fly.x}
+  try{teriSound.pause()}catch(e){}
   deadAt=performance.now();shake=14;bgmStop();playHit();
   taunt=taunts[Math.floor(Math.random()*taunts.length)];
   if(score>best){best=score;try{localStorage.setItem('sayanBest',best)}catch(e){}}
@@ -188,6 +251,8 @@ cv.addEventListener('pointerdown',e=>{e.preventDefault();held=true;flap()});
 function update(dt){
   frame++;
   updateFly(dt);
+  bgmSync();
+  if(fin){updateFin(dt);if(shake>0)shake-=dt;return} // pipes, floor, clouds, flames all frozen
   if(flameT>0)flameT-=dt;
   for(let i=pops.length-1;i>=0;i--){const q=pops[i];q.x-=SPEED*dt;q.y+=.6*dt;q.life-=.03*dt;if(q.life<=0)pops.splice(i,1)}
   for(let i=parts.length-1;i>=0;i--){const q=parts[i];
@@ -211,11 +276,17 @@ function update(dt){
       p.x-=SPEED*dt;
       if(!p.passed&&p.x+PW<W/2-BR){p.passed=true;score++;
         if(FLY_SCORES.includes(score))spawnFly();
+        if(score===TERI_SCORE&&fly&&fly.ph!=='out'&&!fly.final){fly.angry=true;playTeri()}
         if(praise[score]){toast=praise[score];toastT=90}}
-      const bx=W/2,hitX=bx+hb.r>p.x&&bx+hb.l<p.x+PW;
+      const bx=px,hitX=bx+hb.r>p.x&&bx+hb.l<p.x+PW;
       if(hitX&&(by+hb.t<p.top||by+hb.b>p.top+GAP))die();
     }
-    if(pipes[0].x+PW<-10){pipes.shift();pipes.push(newPipe(pipes[pipes.length-1].x+210))}
+    // 36.5 = half a pipe (105px) after score 36
+    if(state==='play'&&!finDone&&!fin&&score>=Math.floor(KICK_AT)){
+      finDist+=SPEED*dt;
+      if(finDist>=PIPE_SPACING*(KICK_AT-Math.floor(KICK_AT))&&fly&&fly.final&&fly.ph==='follow')startFin();
+    }
+    if(pipes[0].x+PW<-10){pipes.shift();pipes.push(newPipe(pipes[pipes.length-1].x+PIPE_SPACING))}
     if(by+hb.b>=GROUND_Y){by=GROUND_Y-hb.b;die()}
   }else if(state==='dead'){
     if(by+hb.b<GROUND_Y){} else{by=GROUND_Y-hb.b;bv=0}
@@ -256,8 +327,8 @@ function draw(){
     ctx.fillStyle='#73bf2e';ctx.fillRect(0,GROUND_Y,W,14);
   }
   // bird
-  ctx.save();ctx.translate(W/2,by);ctx.rotate(rot);
-  const crying=fly&&fly.ph!=='out'&&ok(cryImg),head=crying?cryImg:bird;
+  ctx.save();ctx.translate(px,by);ctx.rotate(rot);if(flip)ctx.scale(-1,1);
+  let head=currentHead();if(!ok(head))head=bird;
   if(ok(head)){
     const s=BR*2.9,r=head.naturalWidth/head.naturalHeight;
     ctx.drawImage(head,-s*r/2,-s/2,s*r,s);
