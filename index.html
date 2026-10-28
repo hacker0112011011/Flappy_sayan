@@ -56,12 +56,33 @@ const kickSound=new Audio('kick.mp3');kickSound.preload='auto';
 // ---------- BACKGROUND MUSIC ----------
 const BGM_VOL=0.8;    // normal music volume (80%)
 const BGM_DUCK=0.01;  // volume while another sound plays (1%)
-const bgm=new Audio('bg.mp3');bgm.loop=true;bgm.preload='auto';
+const bgm=new Audio();
+bgm.loop=true;bgm.preload='auto';bgm.src='bg.mp3';
+let wantBgm=false;    // true while the player is in a running game
+
 function isPlaying(a){return !a.paused&&!a.ended}
-function bgmStart(){            // always starts from the beginning
-  try{bgm.currentTime=0;bgm.volume=BGM_VOL;const p=bgm.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
+
+function tryPlayBgm(){
+  if(!wantBgm)return;
+  try{
+    bgm.volume=BGM_VOL;
+    const p=bgm.play();
+    if(p&&p.catch)p.catch(()=>{});
+  }catch(e){}
 }
-function bgmStop(){try{bgm.pause();bgm.currentTime=0}catch(e){}}
+// if the file was still downloading when the game started, play it as soon as it is ready
+bgm.addEventListener('canplay',tryPlayBgm);
+bgm.load(); // start downloading right away
+
+function bgmStart(){            // always starts from the beginning
+  wantBgm=true;
+  try{if(bgm.readyState>0)bgm.currentTime=0}catch(e){}
+  tryPlayBgm();
+}
+function bgmStop(){
+  wantBgm=false;
+  try{bgm.pause();if(bgm.readyState>0)bgm.currentTime=0}catch(e){}
+}
 function bgmSync(){             // 1% while fly / teri / kick sounds play, otherwise 80%
   const duck=!!fly||isPlaying(teriSound)||isPlaying(kickSound);
   try{bgm.volume=duck?BGM_DUCK:BGM_VOL}catch(e){}
@@ -393,6 +414,24 @@ function draw(){
   }
   ctx.restore();
 }
+
+// ---------- UNLOCK AUDIO ON FIRST TOUCH (mobile browsers) ----------
+// bgm is not in this list: flap() starts it directly inside the tap.
+let audioUnlocked=false;
+function unlockAudio(){
+  if(audioUnlocked)return;audioUnlocked=true;
+  [hitSound,teriSound,kickSound,flyAudio].forEach(a=>{
+    try{
+      const v=a.volume;a.volume=0;
+      const p=a.play();
+      if(p&&p.then)p.then(()=>{a.pause();a.currentTime=0;a.volume=v}).catch(()=>{a.volume=v});
+      else a.volume=v;
+    }catch(e){}
+  });
+}
+addEventListener('pointerdown',unlockAudio,{once:true});
+addEventListener('keydown',unlockAudio,{once:true});
+// -------------------------------------------------------------------
 
 reset();
 let last=performance.now();
