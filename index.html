@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>Flappy Sayan</title>
-<link rel="icon" type="image/png" href="icon.png">
 <style>
   html,body{margin:0;height:100%;background:#1b1530;overflow:hidden;font-family:"Comic Sans MS","Chalkboard SE",system-ui,sans-serif}
   body{display:flex;align-items:center;justify-content:center}
@@ -19,6 +18,26 @@
 // sounds: sound.mp3, pakar.mp3, bg.mp3, teri.mp3, kick.mp3
 const W=400,H=640,FLOOR_H=90,GROUND_Y=H-FLOOR_H;
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+
+// ---------- LEADERBOARD LOGIN ----------
+const API='https://script.google.com/macros/s/AKfycbwZ99B2l1UQVIbOjE89YZiRVKniyOxDhINn715vGv79vKlZoGlFSEYDVyC1JkxGmawhvQ/exec'; // same Google Apps Script web app URL (ends in /exec)
+let acct=null;
+try{
+  const h=new URLSearchParams(location.hash.slice(1));
+  if(h.get('u')&&h.get('t')){                 // login passed from the homepage "Play online" button
+    localStorage.setItem('sayanAcct',JSON.stringify({u:h.get('u'),t:h.get('t')}));
+    history.replaceState(null,'',location.pathname); // hide the token from the address bar
+  }
+  acct=JSON.parse(localStorage.getItem('sayanAcct')||'null');
+}catch(e){}
+function submitScore(){
+  if(!acct||score<1)return;
+  try{
+    fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'score',name:acct.u,token:acct.t,score:score})}).catch(()=>{});
+  }catch(e){}
+}
+// ---------------------------------------
 
 // Hitbox (offsets from the head's center). Auto-fitted to the image once it loads.
 const HB_INSET=3;     // shrink all sides slightly so it feels fair
@@ -56,33 +75,12 @@ const kickSound=new Audio('kick.mp3');kickSound.preload='auto';
 // ---------- BACKGROUND MUSIC ----------
 const BGM_VOL=0.8;    // normal music volume (80%)
 const BGM_DUCK=0.01;  // volume while another sound plays (1%)
-const bgm=new Audio();
-bgm.loop=true;bgm.preload='auto';bgm.src='bg.mp3';
-let wantBgm=false;    // true while the player is in a running game
-
+const bgm=new Audio('bg.mp3');bgm.loop=true;bgm.preload='auto';
 function isPlaying(a){return !a.paused&&!a.ended}
-
-function tryPlayBgm(){
-  if(!wantBgm)return;
-  try{
-    bgm.volume=BGM_VOL;
-    const p=bgm.play();
-    if(p&&p.catch)p.catch(()=>{});
-  }catch(e){}
-}
-// if the file was still downloading when the game started, play it as soon as it is ready
-bgm.addEventListener('canplay',tryPlayBgm);
-bgm.load(); // start downloading right away
-
 function bgmStart(){            // always starts from the beginning
-  wantBgm=true;
-  try{if(bgm.readyState>0)bgm.currentTime=0}catch(e){}
-  tryPlayBgm();
+  try{bgm.currentTime=0;bgm.volume=BGM_VOL;const p=bgm.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
 }
-function bgmStop(){
-  wantBgm=false;
-  try{bgm.pause();if(bgm.readyState>0)bgm.currentTime=0}catch(e){}
-}
+function bgmStop(){try{bgm.pause();bgm.currentTime=0}catch(e){}}
 function bgmSync(){             // 1% while fly / teri / kick sounds play, otherwise 80%
   const duck=!!fly||isPlaying(teriSound)||isPlaying(kickSound);
   try{bgm.volume=duck?BGM_DUCK:BGM_VOL}catch(e){}
@@ -263,6 +261,7 @@ function die(){
   deadAt=performance.now();shake=14;bgmStop();playHit();
   taunt=taunts[Math.floor(Math.random()*taunts.length)];
   if(score>best){best=score;try{localStorage.setItem('sayanBest',best)}catch(e){}}
+  submitScore(); // send this run's score to the shared leaderboard (kept only if it is the player's best)
 }
 
 addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'||e.code==='Enter'){e.preventDefault();if(e.repeat)return;held=true;flap()}});
@@ -400,6 +399,11 @@ function draw(){
     ctx.font='bold 22px "Comic Sans MS",system-ui';ctx.lineWidth=5;ctx.fillStyle='#fff';
     ctx.strokeText('Tap / Space to flap his big head',W/2,H/2+60);ctx.fillText('Tap / Space to flap his big head',W/2,H/2+60);
     ctx.strokeText('Don\u2019t touch the pillars!',W/2,H/2+92);ctx.fillText('Don\u2019t touch the pillars!',W/2,H/2+92);
+    // who is playing
+    ctx.font='bold 18px "Comic Sans MS",system-ui';ctx.lineWidth=4;
+    const who=acct?'Playing as '+acct.u:'Guest: score not saved to leaderboard';
+    ctx.fillStyle=acct?'#9bff9b':'#ffd0d0';
+    ctx.strokeText(who,W/2,H/2+135);ctx.fillText(who,W/2,H/2+135);
   }
   if(state==='dead'){
     ctx.fillStyle='#000a';ctx.fillRect(0,0,W,H);
@@ -414,24 +418,6 @@ function draw(){
   }
   ctx.restore();
 }
-
-// ---------- UNLOCK AUDIO ON FIRST TOUCH (mobile browsers) ----------
-// bgm is not in this list: flap() starts it directly inside the tap.
-let audioUnlocked=false;
-function unlockAudio(){
-  if(audioUnlocked)return;audioUnlocked=true;
-  [hitSound,teriSound,kickSound,flyAudio].forEach(a=>{
-    try{
-      const v=a.volume;a.volume=0;
-      const p=a.play();
-      if(p&&p.then)p.then(()=>{a.pause();a.currentTime=0;a.volume=v}).catch(()=>{a.volume=v});
-      else a.volume=v;
-    }catch(e){}
-  });
-}
-addEventListener('pointerdown',unlockAudio,{once:true});
-addEventListener('keydown',unlockAudio,{once:true});
-// -------------------------------------------------------------------
 
 reset();
 let last=performance.now();
